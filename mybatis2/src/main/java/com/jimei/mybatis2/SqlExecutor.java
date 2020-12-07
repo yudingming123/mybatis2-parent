@@ -53,7 +53,7 @@ public class SqlExecutor {
      * @Param [sst]
      * @Desc 获取数据库连接, 从连接池中拿。
      */
-    private static Connection getConnection(SqlSessionTemplate sst) {
+    private static Connection getCnFromSst(SqlSessionTemplate sst) {
         return SqlSessionUtils.getSqlSession(sst.getSqlSessionFactory(), sst.getExecutorType(), sst.getPersistenceExceptionTranslator()).getConnection();
     }
 
@@ -61,14 +61,14 @@ public class SqlExecutor {
      * @Author yudm
      * @Date 2020/12/7 17:12
      * @Param [label 用于区分数据源]
-     * @Desc 根据label获取对应的Connection，同一个label可能对应多个数据源。
+     * @Desc 根据label获取所有对应的写操作Connection，同一个label可能对应多个数据源。
      */
-    public static List<Connection> getConnections(String label) {
+    public static List<Connection> getWriteCns(String label) {
         List<Connection> list = new ArrayList<>();
         if (null == labelMap || StringUtils.isEmpty(label)) {
             for (SqlSessionTemplate sst : sstMap.values()) {
                 if (null != sst) {
-                    list.add(getConnection(sst));
+                    list.add(getCnFromSst(sst));
                 }
             }
         } else {
@@ -78,11 +78,39 @@ public class SqlExecutor {
                 }
                 SqlSessionTemplate sst = sstMap.get(beanName);
                 if (null != sst) {
-                    list.add(getConnection(sst));
+                    list.add(getCnFromSst(sst));
                 }
             }
         }
         return list;
+    }
+
+    /**
+     * @Author yudm
+     * @Date 2020/12/7 21:16
+     * @Param [label]
+     * @Desc 根据label获取对应的读操作Connection，如果有多个则进行负载均衡。
+     */
+    public static Connection getReadCn(String label){
+        List<Connection> list = new ArrayList<>();
+        if (null == labelMap || StringUtils.isEmpty(label)) {
+            for (SqlSessionTemplate sst : sstMap.values()) {
+                if (null != sst) {
+                    list.add(getCnFromSst(sst));
+                }
+            }
+        } else {
+            for (String beanName : labelMap.get(label)) {
+                if (null == beanName) {
+                    continue;
+                }
+                SqlSessionTemplate sst = sstMap.get(beanName);
+                if (null != sst) {
+                    list.add(getCnFromSst(sst));
+                }
+            }
+        }
+        return null;
     }
 
     /**
