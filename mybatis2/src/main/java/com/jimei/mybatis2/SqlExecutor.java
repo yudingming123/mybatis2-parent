@@ -19,17 +19,17 @@ import java.util.Map;
  * @Desc Sql语句执行者，可分数据源并负载均衡
  */
 public class SqlExecutor {
-    private static final Map<String, List<String>> labelMap = initLabelMap();
+    private static final Map<String, List<String>> labelSstMap = initLabelSstMap();
     private static final Map<String, SqlSessionTemplate> sstMap = initSstMap();
 
     /**
-     *@Author yudm
-     *@Date 2020/12/7 17:22
-     *@Param []
-     *@Desc 初始化labelMap，里面存放 标签->[SqlSessionTemplate在容器中的名字]
+     * @Author yudm
+     * @Date 2020/12/7 17:22
+     * @Param []
+     * @Desc 初始化labelMap，里面存放 标签->[SqlSessionTemplate在容器中的名字]
      */
     @SuppressWarnings("unchecked")
-    private static Map<String, List<String>> initLabelMap() {
+    private static Map<String, List<String>> initLabelSstMap() {
         try {
             return (Map<String, List<String>>) SpringContextUtil.getBean("labelWithSqlSessionTemplateBeanNamesMap");
         } catch (Throwable t) {
@@ -38,14 +38,15 @@ public class SqlExecutor {
     }
 
     /**
-     *@Author yudm
-     *@Date 2020/12/7 17:24
-     *@Param []
-     *@Desc 从IOC容器中获取所有的SqlSessionTemplate对象，用于初始化sstMap
+     * @Author yudm
+     * @Date 2020/12/7 17:24
+     * @Param []
+     * @Desc 从IOC容器中获取所有的SqlSessionTemplate对象，用于初始化sstMap
      */
     private static Map<String, SqlSessionTemplate> initSstMap() {
         return SpringContextUtil.getBeans(SqlSessionTemplate.class);
     }
+
 
     /**
      * @Author yudm
@@ -63,16 +64,16 @@ public class SqlExecutor {
      * @Param [label 用于区分数据源]
      * @Desc 根据label获取所有对应的写操作Connection，同一个label可能对应多个数据源。
      */
-    public static List<Connection> getWriteCns(String label) {
+    private static List<Connection> getWriteCns(String label) {
         List<Connection> list = new ArrayList<>();
-        if (null == labelMap || StringUtils.isEmpty(label)) {
+        if (null == labelSstMap || StringUtils.isEmpty(label)) {
             for (SqlSessionTemplate sst : sstMap.values()) {
                 if (null != sst) {
                     list.add(getCnFromSst(sst));
                 }
             }
         } else {
-            for (String beanName : labelMap.get(label)) {
+            for (String beanName : labelSstMap.get(label)) {
                 if (null == beanName) {
                     continue;
                 }
@@ -91,16 +92,16 @@ public class SqlExecutor {
      * @Param [label]
      * @Desc 根据label获取对应的读操作Connection，如果有多个则进行负载均衡。
      */
-    public static Connection getReadCn(String label){
+    private static Connection getReadCn(String label) {
         List<Connection> list = new ArrayList<>();
-        if (null == labelMap || StringUtils.isEmpty(label)) {
+        if (null == labelSstMap || StringUtils.isEmpty(label)) {
             for (SqlSessionTemplate sst : sstMap.values()) {
                 if (null != sst) {
                     list.add(getCnFromSst(sst));
                 }
             }
         } else {
-            for (String beanName : labelMap.get(label)) {
+            for (String beanName : labelSstMap.get(label)) {
                 if (null == beanName) {
                     continue;
                 }
@@ -115,11 +116,22 @@ public class SqlExecutor {
 
     /**
      * @Author yudm
+     * @Date 2020/12/8 14:50
+     * @Param []
+     * @Desc 对sstMap中的SqlSessionTemplate进行轮询负载均衡
+     */
+    private static SqlSessionTemplate sstLoadBalance() {
+
+        return null;
+    }
+
+    /**
+     * @Author yudm
      * @Date 2020/9/25 15:48
      * @Param [statement, values]
      * @Desc 向sql的占位符中填充值
      */
-    public static void fillPlaceholder(PreparedStatement pst, List<Object> values) throws SQLException {
+    private static void fillPlaceholder(PreparedStatement pst, List<Object> values) throws SQLException {
         if (null == values || values.size() < 1) {
             return;
         }
