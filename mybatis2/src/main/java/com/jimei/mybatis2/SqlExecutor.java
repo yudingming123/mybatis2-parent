@@ -1,6 +1,8 @@
 package com.jimei.mybatis2;
 
 import com.google.common.base.CaseFormat;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.mybatis.spring.SqlSessionUtils;
 import org.springframework.util.StringUtils;
@@ -19,8 +21,53 @@ import java.util.Map;
  * @Desc Sql语句执行者，可分数据源并负载均衡
  */
 public class SqlExecutor {
+    private static final Log log = LogFactory.getLog(SqlExecutor.class);
+    private static final String NO_LABEL = "noLabel";
+    private static final String LABEL_SST_NAME = "labelMatchWithSqlSessionTemplateBeanNamesMap";
     private static final Map<String, List<String>> labelSstMap = initLabelSstMap();
-    private static final Map<String, SqlSessionTemplate> sstMap = initSstMap();
+    private static final Map<String, Integer> DS_AMOUNT_MAP = initDsAmountMap();
+    private static final Map<String, Integer> DS_INDEX_MAP = initDsAmountMap();
+
+    private static final Map<String, List<SqlSessionTemplate>> sstMapList = initSstMapList();
+
+    /**
+     * @Author yudm
+     * @Date 2020/12/8 21:01
+     * @Param []
+     * @Desc 从IOC容器中获取所有的SqlSessionTemplate对象，并根据labelSstMap转化成一个label对应多个数据源的形式
+     */
+    private static Map<String, List<SqlSessionTemplate>> initSstMapList() {
+        Map<String, SqlSessionTemplate> sstMap = initSstMap();
+        Map<String, List<SqlSessionTemplate>> sstMapList = new HashMap<>();
+        if (null != labelSstMap) {
+            labelSstMap.forEach((k, v) -> {
+                List<SqlSessionTemplate> sstList = new ArrayList<>();
+                for (String bn : v) {
+                    sstList.add(sstMap.get(bn));
+                }
+                sstMapList.put(k, sstList);
+            });
+        } else {
+            sstMapList.put(NO_LABEL, new ArrayList<>(sstMap.values()));
+        }
+        return sstMapList;
+    }
+
+    /**
+     * @Author yudm
+     * @Date 2020/12/7 17:24
+     * @Param []
+     * @Desc 从IOC容器中获取所有的SqlSessionTemplate对象，用于初始化sstMap
+     */
+    private static Map<String, SqlSessionTemplate> initSstMap() {
+        try {
+            return SpringContextUtil.getBeans(SqlSessionTemplate.class);
+        } catch (Throwable t) {
+            log.error("mybatis2: 数据源配置错误，导致找不到SqlSessionTemplate的bean");
+            throw new RuntimeException(t);
+        }
+    }
+
 
     /**
      * @Author yudm
@@ -31,32 +78,38 @@ public class SqlExecutor {
     @SuppressWarnings("unchecked")
     private static Map<String, List<String>> initLabelSstMap() {
         try {
-            return (Map<String, List<String>>) SpringContextUtil.getBean("labelWithSqlSessionTemplateBeanNamesMap");
+            return (Map<String, List<String>>) SpringContextUtil.getBean(LABEL_SST_NAME);
         } catch (Throwable t) {
             return null;
         }
     }
 
-    /**
-     * @Author yudm
-     * @Date 2020/12/7 17:24
-     * @Param []
-     * @Desc 从IOC容器中获取所有的SqlSessionTemplate对象，用于初始化sstMap
-     */
-    private static Map<String, SqlSessionTemplate> initSstMap() {
-        return SpringContextUtil.getBeans(SqlSessionTemplate.class);
+    private static Map<String, Integer> initDsAmountMap() {
+        Map<String, Integer> dsAmountMap = new HashMap<>();
+        if (null == labelSstMap) {
+            return null;
+        }
+        labelSstMap.forEach((k, v) -> {
+            if (null == v || 0 == v.size()) {
+                log.error("没有找到与label= " + k + " 对应的SQLSessionTemplate，请检查数据源配置");
+                throw new RuntimeException("没有找到与label= " + k + " 对应的SQLSessionTemplate，请检查数据源配置");
+            }
+            dsAmountMap.put(k, v.size());
+        });
+        return dsAmountMap;
     }
 
-
-    /**
-     * @Author yudm
-     * @Date 2020/9/25 15:49
-     * @Param [sst]
-     * @Desc 获取数据库连接, 从连接池中拿。
-     */
-    private static Connection getCnFromSst(SqlSessionTemplate sst) {
-        return SqlSessionUtils.getSqlSession(sst.getSqlSessionFactory(), sst.getExecutorType(), sst.getPersistenceExceptionTranslator()).getConnection();
+    private static Map<String, Integer> initDsIndexMap() {
+        DS_AMOUNT_MAP.forEach((k, v) -> {
+            if (null == v || 0 == v.size()) {
+                log.error("没有找到与label= " + k + " 对应的SQLSessionTemplate，请检查数据源配置");
+                throw new RuntimeException("没有找到与label= " + k + " 对应的SQLSessionTemplate，请检查数据源配置");
+            }
+            dsAmountMap.put(k, v.size());
+        });
+        return dsAmountMap;
     }
+
 
     /**
      * @Author yudm
@@ -66,18 +119,14 @@ public class SqlExecutor {
      */
     private static List<Connection> getWriteCns(String label) {
         List<Connection> list = new ArrayList<>();
-        if (null == labelSstMap || StringUtils.isEmpty(label)) {
-            for (SqlSessionTemplate sst : sstMap.values()) {
+        if (!HAS_LABEL || StringUtils.isEmpty(label)) {
+            for (SqlSessionTemplate sst : sstMapList.get(NO_LABEL)) {
                 if (null != sst) {
                     list.add(getCnFromSst(sst));
                 }
             }
         } else {
-            for (String beanName : labelSstMap.get(label)) {
-                if (null == beanName) {
-                    continue;
-                }
-                SqlSessionTemplate sst = sstMap.get(beanName);
+            for (SqlSessionTemplate sst : sstMapList.get(label)) {
                 if (null != sst) {
                     list.add(getCnFromSst(sst));
                 }
@@ -116,11 +165,22 @@ public class SqlExecutor {
 
     /**
      * @Author yudm
+     * @Date 2020/9/25 15:49
+     * @Param [sst]
+     * @Desc 获取数据库连接, 从连接池中拿。
+     */
+    private static Connection getCnFromSst(SqlSessionTemplate sst) {
+        return SqlSessionUtils.getSqlSession(sst.getSqlSessionFactory(), sst.getExecutorType(), sst.getPersistenceExceptionTranslator()).getConnection();
+    }
+
+
+    /**
+     * @Author yudm
      * @Date 2020/12/8 14:50
      * @Param []
      * @Desc 对sstMap中的SqlSessionTemplate进行轮询负载均衡
      */
-    private static SqlSessionTemplate sstLoadBalance() {
+    private static SqlSessionTemplate sstLoadBalance(String label) {
 
         return null;
     }
