@@ -13,8 +13,7 @@ public class SpringContextUtil implements ApplicationContextAware {
 
     @SuppressWarnings("NullableProblems")
     @Override
-    public void setApplicationContext(ApplicationContext appContext)
-            throws BeansException {
+    public void setApplicationContext(ApplicationContext appContext) throws BeansException {
         SpringContextUtil.appContext = appContext;
     }
 
@@ -26,8 +25,7 @@ public class SpringContextUtil implements ApplicationContextAware {
         return appContext.getBean(name);
     }
 
-    public static <T> T getBean(String name, Class<T> requiredType)
-            throws BeansException {
+    public static <T> T getBean(String name, Class<T> requiredType) throws BeansException {
         return appContext.getBean(name, requiredType);
     }
 
@@ -35,18 +33,15 @@ public class SpringContextUtil implements ApplicationContextAware {
         return appContext.containsBean(name);
     }
 
-    public static boolean isSingleton(String name)
-            throws NoSuchBeanDefinitionException {
+    public static boolean isSingleton(String name) throws NoSuchBeanDefinitionException {
         return appContext.isSingleton(name);
     }
 
-    public static Class<?> getType(String name)
-            throws NoSuchBeanDefinitionException {
+    public static Class<?> getType(String name) throws NoSuchBeanDefinitionException {
         return appContext.getType(name);
     }
 
-    public static String[] getAliases(String name)
-            throws NoSuchBeanDefinitionException {
+    public static String[] getAliases(String name) throws NoSuchBeanDefinitionException {
         return appContext.getAliases(name);
     }
 
@@ -60,7 +55,8 @@ public class SpringContextUtil implements ApplicationContextAware {
         }
         return beans.values().iterator().next();
     }
-    public static <T> Map<String,T> getBeans(final Class<T> clazz) {
+
+    public static <T> Map<String, T> getBeans(final Class<T> clazz) {
         return appContext.getBeansOfType(clazz);
     }
 }
